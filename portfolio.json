@@ -1,0 +1,5 @@
+[
+  {"symbol": "BTC", "amount": 0.5, "avg_buy_price": 65000},
+  {"symbol": "ETH", "amount": 3.0, "avg_buy_price": 3100},
+  {"symbol": "SOL", "amount": 15.0, "avg_buy_price": 90}
+]
