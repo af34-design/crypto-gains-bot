@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Crypto Gains Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; background: #0f172a; color: #e2e8f0; }
+    main { max-width: 1100px; margin: auto; padding: 28px 18px; }
+    h1 { margin-bottom: 6px; }
+    .muted { color: #94a3b8; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin: 24px 0; }
+    .card, .panel { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 18px; }
+    .label { color: #94a3b8; font-size: .85rem; }
+    .value { font-size: 1.6rem; font-weight: 700; margin-top: 8px; }
+    .positive { color: #4ade80; } .negative { color: #fb7185; }
+    .panel { margin-top: 18px; }
+    canvas { max-height: 350px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { text-align: right; padding: 11px 8px; border-bottom: 1px solid #334155; }
+    th:first-child, td:first-child { text-align: left; }
+    .status { text-align: right; color: #94a3b8; font-size: .85rem; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Crypto Gains Dashboard</h1>
+  <div class="muted">Historical portfolio performance from SQLite</div>
+  <div class="status" id="status">Loading…</div>
+
+  <section class="cards">
+    <div class="card"><div class="label">Portfolio value</div><div class="value" id="value">—</div></div>
+    <div class="card"><div class="label">Total invested</div><div class="value" id="invested">—</div></div>
+    <div class="card"><div class="label">Profit / loss</div><div class="value" id="gain">—</div></div>
+    <div class="card"><div class="label">Return</div><div class="value" id="percent">—</div></div>
+  </section>
+
+  <section class="panel"><h2>Portfolio history</h2><canvas id="historyChart"></canvas></section>
+  <section class="panel"><h2>Current positions</h2><div id="positions">No snapshots yet. Run the monitor with <code>--db</code>.</div></section>
+</main>
+<script>
+let chart;
+const money = (n, currency = 'USD') => new Intl.NumberFormat(undefined, {style:'currency', currency: currency.toUpperCase()}).format(Number(n || 0));
+const cls = n => Number(n) >= 0 ? 'positive' : 'negative';
+
+async function refresh() {
+  const [summaryRes, historyRes, positionsRes] = await Promise.all([
+    fetch('/api/summary'), fetch('/api/history'), fetch('/api/positions')
+  ]);
+  const summary = await summaryRes.json();
+  const history = await historyRes.json();
+  const positions = await positionsRes.json();
+  const currency = summary.currency || 'USD';
+
+  document.querySelector('#value').textContent = money(summary.total_value, currency);
+  document.querySelector('#invested').textContent = money(summary.total_invested, currency);
+  document.querySelector('#gain').textContent = money(summary.total_gain, currency);
+  document.querySelector('#gain').className = 'value ' + cls(summary.total_gain);
+  document.querySelector('#percent').textContent = `${Number(summary.total_percent_gain || 0).toFixed(2)}%`;
+  document.querySelector('#percent').className = 'value ' + cls(summary.total_percent_gain);
+  document.querySelector('#status').textContent = summary.timestamp ? `Last snapshot: ${summary.timestamp}` : 'No data yet';
+
+  if (chart) chart.destroy();
+  chart = new Chart(document.querySelector('#historyChart'), {
+    type: 'line',
+    data: { labels: history.map(x => x.timestamp), datasets: [
+      {label: 'Portfolio value', data: history.map(x => x.total_value), borderColor: '#60a5fa', tension: .25},
+      {label: 'Gain / loss', data: history.map(x => x.total_gain), borderColor: '#4ade80', tension: .25}
+    ]},
+    options: { responsive: true, interaction: {mode: 'index', intersect: false}, scales: {y: {ticks: {color: '#cbd5e1'}}, x: {ticks: {color: '#cbd5e1', maxTicksLimit: 8}}}, plugins: {legend: {labels: {color: '#e2e8f0'}}} }
+  });
+
+  document.querySelector('#positions').innerHTML = positions.length ? `<table><thead><tr><th>Asset</th><th>Amount</th><th>Price</th><th>Value</th><th>P/L</th><th>Return</th></tr></thead><tbody>${positions.map(p => `<tr><td>${p.symbol}</td><td>${Number(p.amount).toFixed(6)}</td><td>${money(p.current_price, p.currency)}</td><td>${money(p.current_value, p.currency)}</td><td class="${cls(p.gain)}">${money(p.gain, p.currency)}</td><td class="${cls(p.percent_gain)}">${Number(p.percent_gain).toFixed(2)}%</td></tr>`).join('')}</tbody></table>` : 'No snapshots yet. Run the monitor with <code>--db</code>.';
+}
+refresh().catch(error => { document.querySelector('#status').textContent = `Dashboard error: ${error.message}`; });
+setInterval(() => refresh().catch(() => {}), 60000);
+</script>
+</body>
+</html>
