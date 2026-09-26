@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard · Crypto Gains</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+  <style>
+    *{box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;margin:0}.header{background:#1e293b;border-bottom:1px solid #334155;padding:16px 24px;display:flex;justify-content:space-between;align-items:center}.header h1{margin:0;font-size:1.5rem}.header a{color:#93c5fd;text-decoration:none;margin-left:16px}.container{max-width:1400px;margin:auto;padding:24px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px}.card{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:20px}.stat{text-align:center}.stat-value{font-size:2rem;font-weight:bold;margin:10px 0}.stat-label{color:#94a3b8;font-size:.9rem}.positive{color:#10b981}.negative{color:#ef4444}.chart-container{height:300px;position:relative}.positions-table{width:100%;border-collapse:collapse;margin-top:12px}.positions-table th,.positions-table td{text-align:left;padding:12px;border-bottom:1px solid #334155}.button-group{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}button{padding:10px 16px;border:0;border-radius:6px;background:#2563eb;color:white;cursor:pointer;font-weight:600}button.secondary{background:#475569}.message{padding:12px;border-radius:6px;margin-bottom:16px}.error{color:#fb7185}.success{color:#10b981}
+  </style>
+</head>
+<body>
+  <header class="header"><h1>📊 Crypto Gains Dashboard</h1><div><span>{{ username }}</span><a href="/logout">Sign out</a></div></header>
+  <main class="container">
+    <div id="message" class="message" hidden></div>
+    <section class="grid">
+      <div class="card stat"><div class="stat-label">Total Value</div><div class="stat-value" id="value">—</div></div>
+      <div class="card stat"><div class="stat-label">Total Invested</div><div class="stat-value" id="invested">—</div></div>
+      <div class="card stat"><div class="stat-label">Gain/Loss</div><div class="stat-value" id="gain">—</div></div>
+      <div class="card stat"><div class="stat-label">Return</div><div class="stat-value" id="percent">—</div></div>
+    </section>
+    <section class="grid" style="margin-top:20px;grid-template-columns:repeat(auto-fit,minmax(400px,1fr))">
+      <div class="card"><h2>Portfolio Value</h2><div class="chart-container"><canvas id="valueChart"></canvas></div></div>
+      <div class="card"><h2>Gain/Loss Trend</h2><div class="chart-container"><canvas id="gainChart"></canvas></div></div>
+    </section>
+    <section class="card" style="margin-top:20px"><h2>Holdings</h2><table class="positions-table"><thead><tr><th>Asset</th><th>Amount</th><th>Current Price</th><th>Value</th><th>P/L</th><th>Return</th></tr></thead><tbody id="positions"><tr><td colspan="6">Loading…</td></tr></tbody></table></section>
+    <section class="card" style="margin-top:20px"><h2>Export</h2><div class="button-group"><button onclick="exportData('json')">Export JSON</button><button class="secondary" onclick="exportData('csv')">Export CSV</button></div></section>
+    <p id="status" style="color:#94a3b8"></p>
+  </main>
+<script>
+let valueChart,gainChart;
+const money=(n,c='USD')=>new Intl.NumberFormat(undefined,{style:'currency',currency:String(c).toUpperCase()}).format(Number(n||0));
+const cls=n=>Number(n)>=0?'positive':'negative';
+async function refresh(){
+ const responses=await Promise.all([fetch('/api/summary'),fetch('/api/history?limit=100'),fetch('/api/positions')]);
+ if(responses.some(r=>r.status===401||r.redirected)){location.href='/login';return}
+ const summary=await responses[0].json(),history=await responses[1].json(),positions=await responses[2].json(),currency=summary.currency||'USD';
+ document.querySelector('#value').textContent=money(summary.total_value,currency);document.querySelector('#invested').textContent=money(summary.total_invested,currency);
+ const gain=document.querySelector('#gain');gain.textContent=money(summary.total_gain,currency);gain.className='stat-value '+cls(summary.total_gain);
+ const percent=document.querySelector('#percent');percent.textContent=`${Number(summary.total_percent_gain||0).toFixed(2)}%`;percent.className='stat-value '+cls(summary.total_percent_gain);
+ document.querySelector('#status').textContent=summary.timestamp?`Last snapshot: ${summary.timestamp}`:'No data yet';
+ const labels=history.map(x=>x.timestamp);
+ if(valueChart)valueChart.destroy();if(gainChart)gainChart.destroy();
+ const opts={responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#cbd5e1'}}},scales:{x:{ticks:{color:'#cbd5e1',maxTicksLimit:8}},y:{ticks:{color:'#cbd5e1'}}}};
+ valueChart=new Chart(document.querySelector('#valueChart'),{type:'line',data:{labels,datasets:[{label:'Portfolio value',data:history.map(x=>x.total_value),borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,.15)',fill:true,tension:.25}]},options:opts});
+ gainChart=new Chart(document.querySelector('#gainChart'),{type:'line',data:{labels,datasets:[{label:'Gain/loss',data:history.map(x=>x.total_gain),borderColor:'#4ade80',backgroundColor:'rgba(74,222,128,.15)',fill:true,tension:.25}]},options:opts});
+ const tbody=document.querySelector('#positions');tbody.innerHTML=positions.length?positions.map(p=>`<tr><td><strong>${p.symbol}</strong></td><td>${Number(p.amount||0).toFixed(6)}</td><td>${money(p.current_price,currency)}</td><td>${money(p.current_value,currency)}</td><td class="${cls(p.gain)}">${money(p.gain,currency)}</td><td class="${cls(p.percent_gain)}">${Number(p.percent_gain||0).toFixed(2)}%</td></tr>`).join(''):'<tr><td colspan="6">No snapshots yet.</td></tr>';
+}
+async function exportData(format){const box=document.querySelector('#message');try{const r=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format})});const d=await r.json();box.textContent=r.ok?`Export created: ${d.filename}`:(d.error||'Export failed');box.className='message '+(r.ok?'success':'error');box.hidden=false;setTimeout(()=>box.hidden=true,5000)}catch(e){box.textContent='Export failed';box.className='message error';box.hidden=false}}
+refresh().catch(e=>document.querySelector('#status').textContent=`Dashboard error: ${e.message}`);setInterval(()=>refresh().catch(()=>{}),60000);
+</script>
+</body>
+</html>
