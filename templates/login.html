@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Crypto Gains</title>
+  <style>body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;display:grid;place-items:center;min-height:100vh;margin:0}.card{width:min(380px,calc(100% - 32px));background:#1e293b;padding:28px;border-radius:12px;border:1px solid #334155}label{display:block;margin-top:16px;color:#cbd5e1}input{box-sizing:border-box;width:100%;padding:11px;margin-top:6px;border-radius:6px;border:1px solid #475569;background:#0f172a;color:#fff}button{width:100%;margin-top:22px;padding:11px;border:0;border-radius:6px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer}.error{color:#fb7185;min-height:1.4em}a{color:#93c5fd}</style>
+</head>
+<body><main class="card"><h1>Crypto Gains</h1><p>Sign in to your private dashboard.</p><p id="error" class="error" role="alert"></p><form id="login" autocomplete="on"><label for="username">Username</label><input id="username" name="username" required autocomplete="username"><label for="password">Password</label><input id="password" name="password" type="password" required autocomplete="current-password"><button type="submit">Sign in</button></form><p>Need an account? <a href="/register">Register</a></p></main><script>document.querySelector('#login').addEventListener('submit',async e=>{e.preventDefault();const error=document.querySelector('#error');error.textContent='';const body={username:e.target.username.value,password:e.target.password.value};try{const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d.error||'Sign-in failed');location.href=d.redirect||'/dashboard'}catch(err){error.textContent=err.message}});</script></body>
+</html>
