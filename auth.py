@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import secrets
 from pathlib import Path
 import json
@@ -53,7 +54,7 @@ class AuthManager:
 
         user = self.users[username]
         hashed_password, _ = self.hash_password(password, user["salt"])
-        return hashed_password == user["password_hash"]
+        return hmac.compare_digest(hashed_password, user["password_hash"])
 
     def authenticate(self, username: str, password: str) -> Optional[str]:
         """Authenticate user and return token."""
@@ -75,7 +76,9 @@ class AuthManager:
 
         user = self.users[username]
         stored_token = user.get("token")
-        return stored_token == token
+        if not stored_token or not token:
+            return False
+        return hmac.compare_digest(str(stored_token), str(token))
 
     def get_user_portfolio_path(self, username: str) -> Optional[str]:
         """Get portfolio path for user."""
